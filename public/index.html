@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canlı Kripto Para Fiyatları</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+  <style>
+    .positive {
+      color: green;
+    }
+    .negative {
+      color: red;
+    }
+    .updated {
+      animation: blink 1s step-start 0s 1;
+    }
+    @keyframes blink {
+      from { background-color: yellow; }
+      to { background-color: inherit; }
+    }
+    th {
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="container mt-5">
+    <h1 class="text-center">Canlı Kripto Para Fiyatları</h1>
+    <table class="table table-striped" id="cryptoTable">
+      <thead>
+        <tr>
+          <th onclick="sortTable(0)">Sıra</th>
+          <th onclick="sortTable(1)">İsim</th>
+          <th onclick="sortTable(2)">Sembol</th>
+          <th onclick="sortTable(3)">Fiyat</th>
+          <th onclick="sortTable(4)">1s %</th>
+          <th onclick="sortTable(5)">24s %</th>
+          <th onclick="sortTable(6)">7g %</th>
+          <th onclick="sortTable(7)">Piyasa Değeri</th>
+          <th onclick="sortTable(8)">Hacim (24s)</th>
+          <th onclick="sortTable(9)">Dolaşımdaki Arz</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    const formatNumber = (num) => {
+      return num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    const formatPrice = (price) => {
+      return `$${price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    let previousData = {};
+    let currentData = [];
+
+    const updateTable = (data) => {
+      currentData = data;
+      const tableBody = document.getElementById('cryptoTable').getElementsByTagName('tbody')[0];
+      tableBody.innerHTML = '';
+      data.forEach((crypto) => {
+        const row = document.createElement('tr');
+
+        const createCell = (text, isPercent = false, isRank = false) => {
+  const cell = document.createElement('td');
+  if (isRank) {
+    cell.innerText = text;
+  } else {
+    cell.innerText = isPercent ? `${formatNumber(text)}%` : formatNumber(text);
+  }
+  return cell;
+};
+
+        const addCellWithColor = (cell, value) => {
+          if (value > 0) {
+            cell.classList.add('positive');
+          } else if (value < 0) {
+            cell.classList.add('negative');
+          }
+        };
+
+        const updateCellAnimation = (cell, newValue, previousValue) => {
+          if (newValue !== previousValue) {
+            cell.classList.add('updated');
+            setTimeout(() => cell.classList.remove('updated'), 1000);
+          }
+        };
+
+        const price = crypto.quote.USD.price;
+        const percentChange1h = crypto.quote.USD.percent_change_1h;
+        const percentChange24h = crypto.quote.USD.percent_change_24h;
+        const percentChange7d = crypto.quote.USD.percent_change_7d;
+        const marketCap = crypto.quote.USD.market_cap;
+        const volume24h = crypto.quote.USD.volume_24h;
+        const circulatingSupply = crypto.circulating_supply;
+
+        row.appendChild(createCell(crypto.cmc_rank, false, true));
+        row.appendChild(createCell(crypto.name));
+        row.appendChild(createCell(crypto.symbol));
+        
+        const priceCell = createCell(formatPrice(price));
+        updateCellAnimation(priceCell, price, previousData[crypto.symbol]?.price);
+        row.appendChild(priceCell);
+        
+        const percentChange1hCell = createCell(percentChange1h, true);
+        addCellWithColor(percentChange1hCell, percentChange1h);
+        updateCellAnimation(percentChange1hCell, percentChange1h, previousData[crypto.symbol]?.percentChange1h);
+        row.appendChild(percentChange1hCell);
+
+        const percentChange24hCell = createCell(percentChange24h, true);
+        addCellWithColor(percentChange24hCell, percentChange24h);
+        updateCellAnimation(percentChange24hCell, percentChange24h, previousData[crypto.symbol]?.percentChange24h);
+        row.appendChild(percentChange24hCell);
+
+        const percentChange7dCell = createCell(percentChange7d, true);
+        addCellWithColor(percentChange7dCell, percentChange7d);
+        updateCellAnimation(percentChange7dCell, percentChange7d, previousData[crypto.symbol]?.percentChange7d);
+        row.appendChild(percentChange7dCell);
+
+        const marketCapCell = createCell(formatPrice(marketCap));
+        updateCellAnimation(marketCapCell, marketCap, previousData[crypto.symbol]?.marketCap);
+        row.appendChild(marketCapCell);
+
+        const volume24hCell = createCell(formatPrice(volume24h));
+        updateCellAnimation(volume24hCell, volume24h, previousData[crypto.symbol]?.volume24h);
+        row.appendChild(volume24hCell);
+
+        const circulatingSupplyCell = createCell(circulatingSupply);
+        updateCellAnimation(circulatingSupplyCell, circulatingSupply, previousData[crypto.symbol]?.circulatingSupply);
+        row.appendChild(circulatingSupplyCell);
+
+        tableBody.appendChild(row);
+
+        previousData[crypto.symbol] = { price, percentChange1h, percentChange24h, percentChange7d, marketCap, volume24h, circulatingSupply };
+      });
+    };
+
+    const sortTable = (columnIndex) => {
+      const sortDirection = currentData.sortDirection || 'asc';
+      const multiplier = sortDirection === 'asc' ? 1 : -1;
+      
+      currentData.sort((a, b) => {
+        let aValue, bValue;
+        
+        switch (columnIndex) {
+          case 0: // Rank
+            aValue = a.cmc_rank;
+            bValue = b.cmc_rank;
+            break;
+          case 1: // Name
+            aValue = a.name;
+            bValue = b.name;
+            break;
+          case 2: // Symbol
+            aValue = a.symbol;
+            bValue = b.symbol;
+            break;
+          case 3: // Price
+            aValue = a.quote.USD.price;
+            bValue = b.quote.USD.price;
+            break;
+          case 4: // 1h %
+            aValue = a.quote.USD.percent_change_1h;
+            bValue = b.quote.USD.percent_change_1h;
+            break;
+          case 5: // 24h %
+            aValue = a.quote.USD.percent_change_24h;
+            bValue = b.quote.USD.percent_change_24h;
+            break;
+          case 6: // 7d %
+            aValue = a.quote.USD.percent_change_7d;
+            bValue = b.quote.USD.percent_change_7d;
+            break;
+          case 7: // Market Cap
+            aValue = a.quote.USD.market_cap;
+            bValue = b.quote.USD.market_cap;
+            break;
+          case 8: // Volume (24h)
+            aValue = a.quote.USD.volume_24h;
+            bValue = b.quote.USD.volume_24h;
+            break;
+          case 9: // Circulating Supply
+            aValue = a.circulating_supply;
+            bValue = b.circulating_supply;
+            break;
+          default:
+            return 0;
+        }
+        
+        if (aValue > bValue) return 1 * multiplier;
+        if (aValue < bValue) return -1 * multiplier;
+        return 0;
+      });
+
+      currentData.sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      updateTable(currentData);
+    };
+
+    socket.on('cryptoData', (data) => {
+      updateTable(data);
+    });
+  </script>
+</body>
+</html>
